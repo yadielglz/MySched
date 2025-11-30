@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="description" content="Employee Schedule Viewer - View your work schedule anytime, anywhere">
+    <meta name="theme-color" content="#E20074">
+    <title>Employee Schedule</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="apple-touch-icon" href="icons/icon-192x192.png">
+</head>
+<body>
+    <div class="container">
+        <div class="clock-container">
+            <div class="clock-time" id="clockTime">--:--</div>
+            <div class="clock-day" id="clockDay">--</div>
+        </div>
+        <header>
+            <h1>📅 Employee Schedule</h1>
+            <div class="header-controls">
+                <input type="text" id="searchInput" placeholder="Search employee..." class="search-input">
+                <button id="refreshBtn" class="refresh-btn" title="Refresh Schedule">
+                    <span>🔄</span>
+                </button>
+            </div>
+        </header>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Loading schedule...</p>
+        </div>
+
+        <div class="error" id="error" style="display: none;">
+            <p>⚠️ Unable to load schedule. Please check your connection and try again.</p>
+            <button id="retryBtn" class="retry-btn">Retry</button>
+        </div>
+
+        <div class="schedule-container" id="scheduleContainer" style="display: none;">
+            <div class="week-selector">
+                <button id="prevWeek" class="week-nav-btn">← Previous Week</button>
+                <span id="weekRange" class="week-range"></span>
+                <button id="nextWeek" class="week-nav-btn">Next Week →</button>
+            </div>
+
+            <div class="schedule-table-wrapper">
+                <table class="schedule-table" id="scheduleTable">
+                    <thead id="scheduleHeader"></thead>
+                    <tbody id="scheduleBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
+

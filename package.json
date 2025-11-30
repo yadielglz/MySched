@@ -1,0 +1,19 @@
+{
+  "name": "mysched",
+  "version": "1.0.0",
+  "description": "Employee Schedule Viewer PWA",
+  "main": "index.html",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "pwa",
+    "schedule",
+    "employee",
+    "google-sheets"
+  ],
+  "author": "",
+  "license": "MIT"
+}
+
