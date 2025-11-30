@@ -11,6 +11,8 @@ let scheduleData = {
 let allEmployees = new Map(); // Map to combine employees across weeks
 let currentWeekOffset = 0;
 let currentWeekView = 'current'; // 'past', 'current', or 'next'
+let currentDayIndex = 0; // 0-6 for the 7 days of the week
+let isMobile = false;
 
 // DOM Elements
 const loadingEl = document.getElementById('loading');
@@ -25,6 +27,10 @@ const retryBtn = document.getElementById('retryBtn');
 const prevWeekBtn = document.getElementById('prevWeek');
 const nextWeekBtn = document.getElementById('nextWeek');
 const weekRangeEl = document.getElementById('weekRange');
+const daySelectorMobile = document.getElementById('daySelectorMobile');
+const prevDayBtn = document.getElementById('prevDay');
+const nextDayBtn = document.getElementById('nextDay');
+const currentDayEl = document.getElementById('currentDay');
 
 // DOM Elements for clock
 const clockTimeEl = document.getElementById('clockTime');
@@ -32,13 +38,31 @@ const clockDayEl = document.getElementById('clockDay');
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
+    checkMobileView();
     loadSchedule();
     setupEventListeners();
     registerServiceWorker();
     setupPWAInstall();
     initializeClock();
     updateClock(); // Initial update
+    
+    // Listen for window resize to handle mobile/desktop switching
+    window.addEventListener('resize', () => {
+        const wasMobile = isMobile;
+        checkMobileView();
+        if (wasMobile !== isMobile) {
+            renderSchedule(); // Re-render if mobile state changed
+        }
+    });
 });
+
+// Check if we're on mobile
+function checkMobileView() {
+    isMobile = window.innerWidth <= 768;
+    if (daySelectorMobile) {
+        daySelectorMobile.style.display = isMobile ? 'flex' : 'none';
+    }
+}
 
 // Event Listeners
 function setupEventListeners() {
@@ -47,6 +71,50 @@ function setupEventListeners() {
     retryBtn.addEventListener('click', loadSchedule);
     prevWeekBtn.addEventListener('click', () => navigateWeek('prev'));
     nextWeekBtn.addEventListener('click', () => navigateWeek('next'));
+    if (prevDayBtn) prevDayBtn.addEventListener('click', () => navigateDay(-1));
+    if (nextDayBtn) nextDayBtn.addEventListener('click', () => navigateDay(1));
+}
+
+// Navigate between days (mobile only)
+function navigateDay(direction) {
+    currentDayIndex += direction;
+    if (currentDayIndex < 0) currentDayIndex = 6;
+    if (currentDayIndex > 6) currentDayIndex = 0;
+    updateDaySelector();
+    renderSchedule();
+}
+
+// Update day selector display
+function updateDaySelector() {
+    if (!isMobile || !currentDayEl) return;
+    
+    const dayNames = ['THU', 'FRI', 'SAT', 'SUN', 'MON', 'TUE', 'WED'];
+    const selectedWeek = {
+        'past': scheduleData.past,
+        'current': scheduleData.current,
+        'next': scheduleData.next
+    }[currentWeekView];
+    
+    if (selectedWeek && selectedWeek.length > 0) {
+        // Get the date for this day
+        let dateRowIndex = -1;
+        for (let i = 0; i < selectedWeek.length; i++) {
+            if (selectedWeek[i] && selectedWeek[i][0] && selectedWeek[i][0].toLowerCase().includes('employee')) {
+                dateRowIndex = i + 1;
+                break;
+            }
+        }
+        if (dateRowIndex >= 0 && dateRowIndex < selectedWeek.length) {
+            const dateRow = selectedWeek[dateRowIndex] || [];
+            const dates = dateRow.slice(1, 8);
+            const date = dates[currentDayIndex] || '';
+            currentDayEl.textContent = `${dayNames[currentDayIndex]}${date ? ' ' + date : ''}`;
+        } else {
+            currentDayEl.textContent = dayNames[currentDayIndex];
+        }
+    } else {
+        currentDayEl.textContent = dayNames[currentDayIndex];
+    }
 }
 
 // Sheet names - these match the Google Sheets tab names
@@ -251,6 +319,7 @@ async function loadSchedule() {
         
         // Reset to current week view on load
         currentWeekView = 'current';
+        currentDayIndex = 0; // Reset to first day
         renderSchedule();
         hideLoading();
         showSchedule();
@@ -315,6 +384,8 @@ function parseCSVLine(line) {
 
 // Navigate between weeks
 function navigateWeek(direction) {
+    // Reset day index when switching weeks
+    currentDayIndex = 0;
     const weekOrder = ['past', 'current', 'next'];
     const currentIndex = weekOrder.indexOf(currentWeekView);
     
@@ -414,15 +485,28 @@ function renderSchedule() {
     console.log(`Header row (${headerRowIndex}):`, headerRow);
     console.log(`Date row (${dateRowIndex}):`, dateRow);
     
-    // Render header
+    // Render header - on mobile, show only selected day; on desktop, show all days
+    const headersToShow = isMobile ? [dayHeaders[0], dayHeaders[currentDayIndex + 1]] : dayHeaders;
+    const datesToShow = isMobile ? [dates[currentDayIndex]] : dates;
+    
     scheduleHeader.innerHTML = `
         <tr>
-            ${dayHeaders.map((day, idx) => `
-                <th>
-                    ${day || ''}
-                    ${idx > 0 && dates[idx - 1] && dates[idx - 1].trim() ? `<br><span style="font-size: 0.75rem; font-weight: normal; color: var(--text-secondary);">${dates[idx - 1]}</span>` : ''}
-                </th>
-            `).join('')}
+            ${headersToShow.map((day, idx) => {
+                if (idx === 0) {
+                    // Employee column
+                    return `<th>${day || 'Employee'}</th>`;
+                } else {
+                    // Day column
+                    const dateIdx = isMobile ? 0 : idx - 1; // On mobile, datesToShow has only one element at index 0
+                    const dateValue = datesToShow[dateIdx];
+                    return `
+                        <th>
+                            ${day || ''}
+                            ${dateValue && dateValue.trim() ? `<br><span style="font-size: 0.75rem; font-weight: normal; color: var(--text-secondary);">${dateValue}</span>` : ''}
+                        </th>
+                    `;
+                }
+            }).join('')}
         </tr>
     `;
     
@@ -506,20 +590,19 @@ function renderSchedule() {
         const row = document.createElement('tr');
         let cells = `<td class="employee-name">${employee.name}</td>`;
         
-        // Process each day
-        employee.dayData.forEach((day, idx) => {
+        // On mobile, show only the selected day; on desktop, show all days
+        if (isMobile) {
+            // Mobile: show only the selected day
+            const day = employee.dayData[currentDayIndex] || { start: '', end: '' };
             const start = day.start || '';
             const end = day.end || '';
             
             // Normalize for comparison
             const startUpper = start.toUpperCase().trim();
             const endUpper = end.toUpperCase().trim();
-            const combined = `${startUpper} ${endUpper}`.trim();
             
             // Check for status indicators
-            // If either start or end contains a status, use it for the entire day
             const hasHoliday = startUpper.includes('HOLIDAY') || endUpper.includes('HOLIDAY');
-            // OFF detection: if either cell has OFF, show OFF for the entire day
             const hasOff = startUpper.includes('OFF') || endUpper.includes('OFF') || 
                           startUpper === 'OFF' || endUpper === 'OFF';
             const hasMgr = startUpper.includes('MGR') || endUpper.includes('MGR') ||
@@ -527,12 +610,7 @@ function renderSchedule() {
                           startUpper === 'MGR' || endUpper === 'MGR' ||
                           startUpper === 'MANAGER' || endUpper === 'MANAGER';
             
-            // Debug for Patricia
-            if (employee.name.toLowerCase().includes('patricia')) {
-                console.log(`  Day ${idx} (${dayHeaders[idx + 1] || 'unknown'}): start="${start}", end="${end}", hasMgr=${hasMgr}`);
-            }
-            
-            // Render cell based on priority: Holiday > Off > Manager > Times > Empty
+            // Render cell based on priority
             if (hasHoliday) {
                 cells += '<td><span class="status-badge status-holiday">Holiday</span></td>';
             } else if (hasOff) {
@@ -551,7 +629,52 @@ function renderSchedule() {
                     </td>
                 `;
             }
-        });
+        } else {
+            // Desktop: show all days
+            employee.dayData.forEach((day, idx) => {
+                const start = day.start || '';
+                const end = day.end || '';
+                
+                // Normalize for comparison
+                const startUpper = start.toUpperCase().trim();
+                const endUpper = end.toUpperCase().trim();
+                const combined = `${startUpper} ${endUpper}`.trim();
+                
+                // Check for status indicators
+                const hasHoliday = startUpper.includes('HOLIDAY') || endUpper.includes('HOLIDAY');
+                const hasOff = startUpper.includes('OFF') || endUpper.includes('OFF') || 
+                              startUpper === 'OFF' || endUpper === 'OFF';
+                const hasMgr = startUpper.includes('MGR') || endUpper.includes('MGR') ||
+                              startUpper.includes('MANAGER') || endUpper.includes('MANAGER') ||
+                              startUpper === 'MGR' || endUpper === 'MGR' ||
+                              startUpper === 'MANAGER' || endUpper === 'MANAGER';
+                
+                // Debug for Patricia
+                if (employee.name.toLowerCase().includes('patricia')) {
+                    console.log(`  Day ${idx} (${dayHeaders[idx + 1] || 'unknown'}): start="${start}", end="${end}", hasMgr=${hasMgr}`);
+                }
+                
+                // Render cell based on priority: Holiday > Off > Manager > Times > Empty
+                if (hasHoliday) {
+                    cells += '<td><span class="status-badge status-holiday">Holiday</span></td>';
+                } else if (hasOff) {
+                    cells += '<td><span class="status-badge status-off">Off</span></td>';
+                } else if (hasMgr) {
+                    cells += '<td><span class="status-badge status-mgr">Manager</span></td>';
+                } else if (!start && !end) {
+                    cells += '<td class="empty-cell">-</td>';
+                } else {
+                    cells += `
+                        <td>
+                            <div class="time-slot">
+                                ${start ? `<span class="start-time">${start}</span>` : ''}
+                                ${end ? `<span class="end-time">${end}</span>` : ''}
+                            </div>
+                        </td>
+                    `;
+                }
+            });
+        }
         
         row.innerHTML = cells;
         scheduleBody.appendChild(row);
@@ -561,6 +684,9 @@ function renderSchedule() {
     
     updateWeekRange();
     updateNavigationButtons();
+    if (isMobile) {
+        updateDaySelector();
+    }
 }
 
 // Search functionality
