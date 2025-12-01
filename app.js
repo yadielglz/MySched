@@ -15,22 +15,54 @@ let currentDayIndex = 0; // 0-6 for the 7 days of the week
 let isMobile = false;
 
 // DOM Elements
+const homeView = document.getElementById('homeView');
+const scheduleView = document.getElementById('scheduleView');
+const promotionsView = document.getElementById('promotionsView');
+const homeBtn = document.getElementById('homeBtn');
+const scheduleBtn = document.getElementById('scheduleBtn');
+const promotionsBtn = document.getElementById('promotionsBtn');
+const viewScheduleBtn = document.getElementById('viewScheduleBtn');
+const refreshPromosBtn = document.getElementById('refreshPromosBtn');
+const promoLoading = document.getElementById('promoLoading');
+const promoError = document.getElementById('promoError');
+const promoContent = document.getElementById('promoContent');
+const promoGrid = document.getElementById('promoGrid');
+const promoFilters = document.getElementById('promoFilters');
+const filterType = document.getElementById('filterType');
+const filterPlan = document.getElementById('filterPlan');
+const filterSearch = document.getElementById('filterSearch');
+const clearFiltersBtn = document.getElementById('clearFilters');
+const retryPromoBtn = document.getElementById('retryPromoBtn');
+const promoModal = document.getElementById('promoModal');
+const promoModalOverlay = document.getElementById('promoModalOverlay');
+const promoModalClose = document.getElementById('promoModalClose');
+const promoModalBody = document.getElementById('promoModalBody');
+
 const loadingEl = document.getElementById('loading');
 const errorEl = document.getElementById('error');
 const scheduleContainer = document.getElementById('scheduleContainer');
 const scheduleTable = document.getElementById('scheduleTable');
 const scheduleHeader = document.getElementById('scheduleHeader');
 const scheduleBody = document.getElementById('scheduleBody');
-const searchInput = document.getElementById('searchInput');
 const refreshBtn = document.getElementById('refreshBtn');
 const retryBtn = document.getElementById('retryBtn');
 const prevWeekBtn = document.getElementById('prevWeek');
 const nextWeekBtn = document.getElementById('nextWeek');
 const weekRangeEl = document.getElementById('weekRange');
 const daySelectorMobile = document.getElementById('daySelectorMobile');
+const mobileNavContainer = document.getElementById('mobileNavContainer');
 const prevDayBtn = document.getElementById('prevDay');
 const nextDayBtn = document.getElementById('nextDay');
 const currentDayEl = document.getElementById('currentDay');
+const prevWeekMobileBtn = document.getElementById('prevWeekMobile');
+const nextWeekMobileBtn = document.getElementById('nextWeekMobile');
+const weekRangeMobileEl = document.getElementById('weekRangeMobile');
+const currentWeekInfo = document.getElementById('currentWeekInfo');
+const employeeCount = document.getElementById('employeeCount');
+
+// Promotions data
+let promotionsData = [];
+let filteredPromotions = [];
 
 // DOM Elements for clock
 const clockTimeEl = document.getElementById('clockTime');
@@ -39,40 +71,203 @@ const clockDayEl = document.getElementById('clockDay');
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     checkMobileView();
-    loadSchedule();
     setupEventListeners();
     registerServiceWorker();
     setupPWAInstall();
     initializeClock();
     updateClock(); // Initial update
     
+    // Show home view by default
+    showView('home');
+    
     // Listen for window resize to handle mobile/desktop switching
     window.addEventListener('resize', () => {
         const wasMobile = isMobile;
         checkMobileView();
         if (wasMobile !== isMobile) {
+            // If switching to mobile and schedule view is active, set to today's day
+            if (isMobile && scheduleView && scheduleView.style.display === 'block') {
+                setCurrentDayToToday();
+            }
             renderSchedule(); // Re-render if mobile state changed
         }
     });
 });
 
+// Get current day index based on today's date
+// Schedule week starts Thursday (0=THU, 1=FRI, 2=SAT, 3=SUN, 4=MON, 5=TUE, 6=WED)
+function getTodayDayIndex() {
+    const today = new Date();
+    const dayOfWeek = today.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+    
+    // Map JavaScript day to schedule day index
+    // Schedule: THU=0, FRI=1, SAT=2, SUN=3, MON=4, TUE=5, WED=6
+    // JavaScript: SUN=0, MON=1, TUE=2, WED=3, THU=4, FRI=5, SAT=6
+    const dayMap = {
+        0: 3, // Sunday -> SUN (index 3)
+        1: 4, // Monday -> MON (index 4)
+        2: 5, // Tuesday -> TUE (index 5)
+        3: 6, // Wednesday -> WED (index 6)
+        4: 0, // Thursday -> THU (index 0)
+        5: 1, // Friday -> FRI (index 1)
+        6: 2  // Saturday -> SAT (index 2)
+    };
+    
+    return dayMap[dayOfWeek] || 0;
+}
+
+// Set current day to today (mobile only)
+function setCurrentDayToToday() {
+    if (isMobile) {
+        currentDayIndex = getTodayDayIndex();
+        updateDaySelector();
+    }
+}
+
 // Check if we're on mobile
 function checkMobileView() {
+    const wasMobile = isMobile;
     isMobile = window.innerWidth <= 768;
-    if (daySelectorMobile) {
-        daySelectorMobile.style.display = isMobile ? 'flex' : 'none';
+    
+    // Show/hide mobile navigation container
+    if (mobileNavContainer) {
+        mobileNavContainer.style.display = isMobile ? 'flex' : 'none';
+    }
+    // Hide desktop week selector on mobile
+    const weekSelector = document.querySelector('.week-selector');
+    if (weekSelector) {
+        weekSelector.style.display = isMobile ? 'none' : 'flex';
+    }
+    
+    // If switching to mobile, set current day to today
+    if (isMobile && !wasMobile) {
+        setCurrentDayToToday();
     }
 }
 
 // Event Listeners
 function setupEventListeners() {
-    searchInput.addEventListener('input', handleSearch);
+    // Navigation
+    homeBtn.addEventListener('click', () => showView('home'));
+    scheduleBtn.addEventListener('click', () => showView('schedule'));
+    promotionsBtn.addEventListener('click', () => showView('promotions'));
+    viewScheduleBtn.addEventListener('click', () => showView('schedule'));
+    
+    // Schedule controls
     refreshBtn.addEventListener('click', loadSchedule);
     retryBtn.addEventListener('click', loadSchedule);
     prevWeekBtn.addEventListener('click', () => navigateWeek('prev'));
     nextWeekBtn.addEventListener('click', () => navigateWeek('next'));
+    if (prevWeekMobileBtn) prevWeekMobileBtn.addEventListener('click', () => navigateWeek('prev'));
+    if (nextWeekMobileBtn) nextWeekMobileBtn.addEventListener('click', () => navigateWeek('next'));
     if (prevDayBtn) prevDayBtn.addEventListener('click', () => navigateDay(-1));
     if (nextDayBtn) nextDayBtn.addEventListener('click', () => navigateDay(1));
+    
+    // Promotions controls
+    if (refreshPromosBtn) refreshPromosBtn.addEventListener('click', loadPromotions);
+    if (retryPromoBtn) retryPromoBtn.addEventListener('click', loadPromotions);
+    if (filterType) filterType.addEventListener('change', applyFilters);
+    if (filterSearch) filterSearch.addEventListener('input', applyFilters);
+    if (clearFiltersBtn) clearFiltersBtn.addEventListener('click', clearAllFilters);
+    if (promoModalClose) promoModalClose.addEventListener('click', closePromoModal);
+    if (promoModalOverlay) promoModalOverlay.addEventListener('click', closePromoModal);
+    
+    // Close modal on Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && promoModal && promoModal.style.display !== 'none') {
+            closePromoModal();
+        }
+    });
+}
+
+// View Navigation
+function showView(view) {
+    // Hide all views
+    homeView.style.display = 'none';
+    scheduleView.style.display = 'none';
+    if (promotionsView) promotionsView.style.display = 'none';
+    
+    // Remove active class from all nav buttons
+    homeBtn.classList.remove('active');
+    scheduleBtn.classList.remove('active');
+    if (promotionsBtn) promotionsBtn.classList.remove('active');
+    
+    // Show selected view and activate button
+    if (view === 'home') {
+        homeView.style.display = 'block';
+        homeBtn.classList.add('active');
+    } else if (view === 'schedule') {
+        scheduleView.style.display = 'block';
+        scheduleBtn.classList.add('active');
+        // Load schedule if not already loaded
+        if (scheduleData.current.length === 0 && scheduleData.past.length === 0 && scheduleData.next.length === 0) {
+            loadSchedule();
+        }
+        // On mobile, set to today's day when viewing schedule
+        if (isMobile) {
+            setCurrentDayToToday();
+            renderSchedule();
+        }
+    } else if (view === 'promotions') {
+        if (promotionsView) {
+            promotionsView.style.display = 'block';
+            promotionsBtn.classList.add('active');
+            loadPromotions();
+        }
+    }
+}
+
+// Update home page info
+function updateHomeInfo() {
+    const weekLabels = {
+        'past': 'Past Week',
+        'current': 'Current Week',
+        'next': 'Next Week'
+    };
+    currentWeekInfo.textContent = weekLabels[currentWeekView] || 'Current Week';
+    
+    // Count unique employees
+    const employees = new Set();
+    if (scheduleData.current && scheduleData.current.length > 0) {
+        // Parse employees from current week
+        const currentEmployees = parseEmployeesFromData(scheduleData.current);
+        currentEmployees.forEach(emp => employees.add(emp.name));
+    }
+    employeeCount.textContent = employees.size > 0 ? employees.size : '-';
+}
+
+// Helper function to parse employees from data (simplified version)
+function parseEmployeesFromData(data) {
+    const employees = [];
+    let headerRowIndex = -1;
+    let dateRowIndex = -1;
+    
+    for (let i = 0; i < data.length; i++) {
+        const row = data[i];
+        if (row && row[0] && row[0].toLowerCase().includes('employee')) {
+            headerRowIndex = i;
+            dateRowIndex = i + 1;
+            break;
+        }
+    }
+    
+    if (headerRowIndex === -1) {
+        headerRowIndex = 0;
+        dateRowIndex = 1;
+    }
+    
+    const startIndex = dateRowIndex + 1;
+    for (let i = startIndex; i < data.length; i++) {
+        const currentRow = data[i];
+        if (!currentRow || !currentRow[0]) continue;
+        const firstCell = String(currentRow[0]).trim();
+        if (!firstCell || firstCell.toLowerCase().includes('employee')) {
+            continue;
+        }
+        employees.push({ name: firstCell });
+    }
+    
+    return employees;
 }
 
 // Navigate between days (mobile only)
@@ -95,6 +290,10 @@ function updateDaySelector() {
         'next': scheduleData.next
     }[currentWeekView];
     
+    // Check if current day is today
+    const todayIndex = getTodayDayIndex();
+    const isToday = currentWeekView === 'current' && currentDayIndex === todayIndex;
+    
     if (selectedWeek && selectedWeek.length > 0) {
         // Get the date for this day
         let dateRowIndex = -1;
@@ -108,12 +307,17 @@ function updateDaySelector() {
             const dateRow = selectedWeek[dateRowIndex] || [];
             const dates = dateRow.slice(1, 8);
             const date = dates[currentDayIndex] || '';
-            currentDayEl.textContent = `${dayNames[currentDayIndex]}${date ? ' ' + date : ''}`;
+            // Show "Today" if it's the current day in current week, otherwise show day name and date
+            if (isToday) {
+                currentDayEl.textContent = 'Today';
+            } else {
+                currentDayEl.textContent = `${dayNames[currentDayIndex]}${date ? ' ' + date : ''}`;
+            }
         } else {
-            currentDayEl.textContent = dayNames[currentDayIndex];
+            currentDayEl.textContent = isToday ? 'Today' : dayNames[currentDayIndex];
         }
     } else {
-        currentDayEl.textContent = dayNames[currentDayIndex];
+        currentDayEl.textContent = isToday ? 'Today' : dayNames[currentDayIndex];
     }
 }
 
@@ -319,10 +523,16 @@ async function loadSchedule() {
         
         // Reset to current week view on load
         currentWeekView = 'current';
-        currentDayIndex = 0; // Reset to first day
+        // On mobile, set to today; otherwise reset to first day
+        if (isMobile) {
+            setCurrentDayToToday();
+        } else {
+            currentDayIndex = 0;
+        }
         renderSchedule();
         hideLoading();
         showSchedule();
+        updateHomeInfo(); // Update home page info
     } catch (error) {
         console.error('Error loading schedule:', error);
         hideLoading();
@@ -384,8 +594,12 @@ function parseCSVLine(line) {
 
 // Navigate between weeks
 function navigateWeek(direction) {
-    // Reset day index when switching weeks
-    currentDayIndex = 0;
+    // On mobile, set to today when viewing current week; otherwise reset to first day
+    if (isMobile && currentWeekView === 'current') {
+        setCurrentDayToToday();
+    } else {
+        currentDayIndex = 0;
+    }
     const weekOrder = ['past', 'current', 'next'];
     const currentIndex = weekOrder.indexOf(currentWeekView);
     
@@ -407,10 +621,26 @@ function updateNavigationButtons() {
     const weekOrder = ['past', 'current', 'next'];
     const currentIndex = weekOrder.indexOf(currentWeekView);
     
-    prevWeekBtn.disabled = currentIndex === 0;
-    nextWeekBtn.disabled = currentIndex === weekOrder.length - 1;
+    const isPrevDisabled = currentIndex === 0;
+    const isNextDisabled = currentIndex === weekOrder.length - 1;
     
-    // Add visual feedback
+    // Desktop buttons
+    prevWeekBtn.disabled = isPrevDisabled;
+    nextWeekBtn.disabled = isNextDisabled;
+    
+    // Mobile buttons
+    if (prevWeekMobileBtn) {
+        prevWeekMobileBtn.disabled = isPrevDisabled;
+        prevWeekMobileBtn.style.opacity = isPrevDisabled ? '0.5' : '1';
+        prevWeekMobileBtn.style.cursor = isPrevDisabled ? 'not-allowed' : 'pointer';
+    }
+    if (nextWeekMobileBtn) {
+        nextWeekMobileBtn.disabled = isNextDisabled;
+        nextWeekMobileBtn.style.opacity = isNextDisabled ? '0.5' : '1';
+        nextWeekMobileBtn.style.cursor = isNextDisabled ? 'not-allowed' : 'pointer';
+    }
+    
+    // Add visual feedback for desktop
     if (prevWeekBtn.disabled) {
         prevWeekBtn.style.opacity = '0.5';
         prevWeekBtn.style.cursor = 'not-allowed';
@@ -689,25 +919,6 @@ function renderSchedule() {
     }
 }
 
-// Search functionality
-function handleSearch(e) {
-    const query = e.target.value.toLowerCase().trim();
-    
-    // Filter employees based on search
-    const employeeRows = scheduleBody.querySelectorAll('tr');
-    employeeRows.forEach(row => {
-        const nameCell = row.querySelector('.employee-name');
-        if (nameCell) {
-            const name = nameCell.textContent.toLowerCase();
-            if (query === '' || name.includes(query)) {
-                row.style.display = '';
-            } else {
-                row.style.display = 'none';
-            }
-        }
-    });
-}
-
 function updateWeekRange() {
     // Show the currently selected week
     const weekLabels = {
@@ -716,7 +927,13 @@ function updateWeekRange() {
         'next': 'Next Week'
     };
     
-    weekRangeEl.textContent = weekLabels[currentWeekView];
+    if (weekRangeEl) {
+        weekRangeEl.textContent = weekLabels[currentWeekView];
+    }
+    // Update mobile week label
+    if (weekRangeMobileEl) {
+        weekRangeMobileEl.textContent = weekLabels[currentWeekView];
+    }
 }
 
 // UI Helpers
@@ -810,6 +1027,469 @@ function updateClock() {
     }
     if (clockDayEl) {
         clockDayEl.textContent = formattedDay;
+    }
+}
+
+// Promotions Module
+// Google Sheet for promotions (primary source for parsing)
+const PROMO_GOOGLE_SHEET_ID = '1aHZ2p4KK3Kho75aT8wjOFMlvhrgFSITj9VG7te2Apyk';
+const PROMO_GOOGLE_SHEET_NAME = 'Promo'; // Sheet name
+// Proton Drive URL (only for download button, not for parsing)
+const PROMO_DOWNLOAD_URL = 'https://drive.proton.me/urls/5ZCKS3Y534#8tcCBS6uIwRB';
+
+async function loadPromotions() {
+    if (!promoLoading || !promoError || !promoContent) return;
+    
+    // Show loading state
+    promoLoading.style.display = 'block';
+    promoError.style.display = 'none';
+    promoContent.style.display = 'none';
+    if (promoFilters) promoFilters.style.display = 'none';
+    
+    try {
+        // Load from Google Sheet (primary source)
+        if (!PROMO_GOOGLE_SHEET_ID) {
+            throw new Error('Google Sheet ID not configured');
+        }
+        
+        const sheetUrl = `https://docs.google.com/spreadsheets/d/${PROMO_GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(PROMO_GOOGLE_SHEET_NAME)}&t=${Date.now()}`;
+        
+        const response = await fetch(sheetUrl, {
+            method: 'GET',
+            mode: 'cors',
+            cache: 'no-store'
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const csvText = await response.text();
+        promotionsData = parseCSVPromotions(csvText);
+        
+        if (promotionsData.length === 0) {
+            console.warn('No promotional offers found in sheet. Make sure the sheet has columns: title/promo_name, requirements, limitations');
+            // Show helpful message instead of sample data
+            promoContent.innerHTML = `
+                <div class="promo-info">
+                    <h2>📋 No Promotions Found</h2>
+                    <p class="promo-description">
+                        The Google Sheet doesn't contain promotional offer data. 
+                        Please add promotional offers with the following columns:
+                    </p>
+                    <ul class="promo-list" style="text-align: left; max-width: 600px; margin: 1rem auto;">
+                        <li><strong>title</strong> or <strong>promo_name</strong> - The promotion name (e.g., "iPhone 17 on us")</li>
+                        <li><strong>description</strong> - General description of the offer</li>
+                        <li><strong>requirements</strong> - What's needed to qualify</li>
+                        <li><strong>limitations</strong> - Restrictions/limitations</li>
+                        <li><strong>valid_until</strong> - Expiration date (optional)</li>
+                        <li><strong>type</strong> - Category (optional)</li>
+                        <li><strong>discount</strong> - Discount/offer amount (optional)</li>
+                    </ul>
+                </div>
+            `;
+            promoLoading.style.display = 'none';
+            promoContent.style.display = 'block';
+            return;
+        }
+        
+        populateFilters();
+        filteredPromotions = [...promotionsData];
+        displayPromotions();
+        
+        promoLoading.style.display = 'none';
+        promoContent.style.display = 'block';
+        if (promoFilters) promoFilters.style.display = 'flex';
+        
+    } catch (error) {
+        console.error('Error loading promotions from Google Sheet:', error);
+        promoLoading.style.display = 'none';
+        promoError.style.display = 'block';
+    }
+}
+
+// Parse JSON promotions data
+function parseJSONPromotions(data) {
+    const promotions = [];
+    
+    // Handle different JSON structures
+    if (Array.isArray(data)) {
+        data.forEach((item, index) => {
+            promotions.push({
+                id: item.id || index,
+                title: item.title || item.name || 'Promotion',
+                description: item.description || item.desc || '',
+                type: item.type || item.category || 'General',
+                plan: item.plan || item.planType || 'All',
+                discount: item.discount || item.percent || '',
+                validUntil: item.validUntil || item.expires || '',
+                image: item.image || item.imageUrl || '',
+                link: item.link || item.url || ''
+            });
+        });
+    } else if (data.promotions && Array.isArray(data.promotions)) {
+        return parseJSONPromotions(data.promotions);
+    } else if (typeof data === 'object') {
+        // Single promotion object
+        promotions.push({
+            id: data.id || 0,
+            title: data.title || data.name || 'Promotion',
+            description: data.description || data.desc || '',
+            type: data.type || data.category || 'General',
+            plan: data.plan || data.planType || 'All',
+            discount: data.discount || data.percent || '',
+            validUntil: data.validUntil || data.expires || '',
+            image: data.image || data.imageUrl || '',
+            link: data.link || data.url || ''
+        });
+    }
+    
+    return promotions;
+}
+
+// Parse CSV promotions data - ONLY for promotional offers
+function parseCSVPromotions(csvText) {
+    const promotions = [];
+    const lines = csvText.split('\n').filter(line => line.trim());
+    
+    if (lines.length === 0) return promotions;
+    
+    // Parse header row
+    const headers = parseCSVLine(lines[0]);
+    const headerMap = {};
+    headers.forEach((h, i) => {
+        headerMap[h.toLowerCase().trim()] = i;
+    });
+    
+    // Check if this looks like a promotions sheet (has promo-specific columns)
+    const hasPromoColumns = headerMap['title'] !== undefined || 
+                           headerMap['promo_name'] !== undefined || 
+                           headerMap['promotion'] !== undefined ||
+                           headerMap['requirements'] !== undefined ||
+                           headerMap['limitations'] !== undefined;
+    
+    // Check if this looks like a plan/pricing sheet (has plan columns)
+    const hasPlanColumns = headerMap['plan_id'] !== undefined || 
+                          headerMap['plan_name'] !== undefined || 
+                          headerMap['plan_type'] !== undefined ||
+                          headerMap['monthly_total_usd'] !== undefined ||
+                          headerMap['price_per_line_usd'] !== undefined;
+    
+    // If it has plan columns but no promo columns, return empty (don't parse plan data)
+    if (hasPlanColumns && !hasPromoColumns) {
+        console.warn('Sheet contains plan/pricing data, not promotional offers. Expected columns: title/promo_name, requirements, limitations');
+        return promotions;
+    }
+    
+    // Parse data rows
+    for (let i = 1; i < lines.length; i++) {
+        const cells = parseCSVLine(lines[i]);
+        if (cells.length === 0 || !cells[0] || !cells[0].trim()) continue;
+        
+        const getValue = (key) => {
+            const idx = headerMap[key];
+            return idx !== undefined ? (cells[idx] || '').trim() : '';
+        };
+        
+        // ONLY look for promotional offer columns
+        const promoTitle = getValue('title') || getValue('promo_name') || getValue('promotion') || getValue('name') || '';
+        const description = getValue('description') || getValue('desc') || getValue('details') || '';
+        const requirements = getValue('requirements') || getValue('requirement') || getValue('qualifications') || '';
+        const limitations = getValue('limitations') || getValue('limitation') || getValue('restrictions') || getValue('restriction') || '';
+        const validUntil = getValue('valid_until') || getValue('validuntil') || getValue('expires') || getValue('end_date') || getValue('end date') || '';
+        const promoType = getValue('type') || getValue('category') || getValue('promo_type') || 'Current Offer';
+        const discount = getValue('discount') || getValue('savings') || getValue('offer') || '';
+        const image = getValue('image') || getValue('image_url') || getValue('imageurl') || '';
+        const link = getValue('link') || getValue('url') || '';
+        
+        // Parse device lists for different price tiers
+        const devices900 = getValue('devices_900') || getValue('$900_devices') || getValue('devices_900_list') || '';
+        const devices630 = getValue('devices_630') || getValue('$630_devices') || getValue('devices_630_list') || '';
+        const devices315 = getValue('devices_315') || getValue('$315_devices') || getValue('devices_315_list') || '';
+        const additionalInfo = getValue('additional_info') || getValue('more_info') || '';
+        
+        // Skip if no promotional title
+        if (!promoTitle || promoTitle.trim() === '') continue;
+        
+        // If sheet has plan columns, skip rows that look like plan data
+        if (hasPlanColumns) {
+            // Skip if this row has plan data but no actual promo title in a promo column
+            if (getValue('plan_id') || (getValue('plan_name') && !hasPromoColumns)) {
+                continue;
+            }
+        }
+        
+        promotions.push({
+            id: i - 1,
+            title: promoTitle,
+            description: description || '',
+            requirements: requirements || '',
+            limitations: limitations || '',
+            type: promoType,
+            discount: discount,
+            validUntil: validUntil,
+            image: image,
+            link: link,
+            devices900: devices900,
+            devices630: devices630,
+            devices315: devices315,
+            additionalInfo: additionalInfo
+        });
+    }
+    
+    return promotions;
+}
+
+// Create sample promotions for demonstration
+function createSamplePromotions() {
+    return [
+        {
+            id: 1,
+            title: 'iPhone 17 on Us',
+            description: 'Get the latest iPhone 17 absolutely free with eligible plan',
+            type: 'Device Promotion',
+            discount: 'Free Device',
+            requirements: 'New line activation required; Trade-in of eligible device; Minimum $60/month plan',
+            limitations: 'One per account; Limited time offer; Subject to credit approval; While supplies last',
+            validUntil: '2024-12-31',
+            image: '',
+            link: ''
+        },
+        {
+            id: 2,
+            title: 'Holiday Special - Free Activation',
+            description: 'No activation fees this holiday season',
+            type: 'Promotion',
+            discount: 'Save $35',
+            requirements: 'New customer or new line; Must activate before December 31st',
+            limitations: 'Cannot be combined with other device promotions; One per account',
+            validUntil: '2024-12-31',
+            image: '',
+            link: ''
+        }
+    ];
+}
+
+// Display image promotion
+function displayImagePromotion(imageUrl) {
+    if (!promoGrid) return;
+    promoGrid.innerHTML = `
+        <div class="promo-image-container">
+            <img src="${imageUrl}" alt="Promotions" class="promo-image">
+        </div>
+    `;
+}
+
+// Display promotions in grid
+function displayPromotions() {
+    if (!promoGrid) return;
+    
+    if (filteredPromotions.length === 0) {
+        promoGrid.innerHTML = '<div class="no-promotions">No promotions match your filters.</div>';
+        return;
+    }
+    
+    promoGrid.innerHTML = filteredPromotions.map(promo => `
+        <div class="promo-card" data-type="${promo.type || ''}" data-promo-id="${promo.id}" onclick="showPromoDetails(${promo.id})">
+            ${promo.image ? `<div class="promo-image-wrapper"><img src="${promo.image}" alt="${promo.title}" class="promo-card-image"></div>` : ''}
+            <div class="promo-card-content">
+                <div class="promo-card-header">
+                    <h3 class="promo-card-title">${promo.title}</h3>
+                    ${promo.discount ? `<span class="promo-badge">${promo.discount}</span>` : ''}
+                </div>
+                ${promo.description ? `<p class="promo-card-description">${promo.description}</p>` : ''}
+                ${promo.type ? `<div class="promo-card-meta">
+                    <span class="promo-type">${promo.type}</span>
+                </div>` : ''}
+                ${promo.requirements ? `
+                    <div class="promo-section">
+                        <h4 class="promo-section-title">📋 Requirements</h4>
+                        <div class="promo-section-content">${formatPromoText(promo.requirements)}</div>
+                    </div>
+                ` : ''}
+                ${promo.limitations ? `
+                    <div class="promo-section">
+                        <h4 class="promo-section-title">⚠️ Limitations</h4>
+                        <div class="promo-section-content">${formatPromoText(promo.limitations)}</div>
+                    </div>
+                ` : ''}
+                ${promo.validUntil ? `<div class="promo-validity">⏰ Valid until: ${promo.validUntil}</div>` : ''}
+                <div class="promo-card-footer">
+                    <button class="promo-view-details-btn">View Details →</button>
+                    ${promo.link ? `<a href="${promo.link}" target="_blank" class="promo-link" onclick="event.stopPropagation()">Learn More →</a>` : ''}
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Show promo details in modal
+function showPromoDetails(promoId) {
+    const promo = promotionsData.find(p => p.id === promoId);
+    if (!promo || !promoModal || !promoModalBody) return;
+    
+    let deviceListsHtml = '';
+    if (promo.devices900 || promo.devices630 || promo.devices315) {
+        deviceListsHtml = '<div class="promo-device-lists">';
+        if (promo.devices900) {
+            deviceListsHtml += `
+                <div class="device-tier">
+                    <h4 class="device-tier-title">$900 Off Devices</h4>
+                    <div class="device-tier-content">${formatPromoText(promo.devices900)}</div>
+                </div>
+            `;
+        }
+        if (promo.devices630) {
+            deviceListsHtml += `
+                <div class="device-tier">
+                    <h4 class="device-tier-title">$630 Off Devices</h4>
+                    <div class="device-tier-content">${formatPromoText(promo.devices630)}</div>
+                </div>
+            `;
+        }
+        if (promo.devices315) {
+            deviceListsHtml += `
+                <div class="device-tier">
+                    <h4 class="device-tier-title">$315 Off Devices</h4>
+                    <div class="device-tier-content">${formatPromoText(promo.devices315)}</div>
+                </div>
+            `;
+        }
+        deviceListsHtml += '</div>';
+    }
+    
+    promoModalBody.innerHTML = `
+        <div class="promo-modal-header">
+            <h2 class="promo-modal-title">${promo.title}</h2>
+            ${promo.discount ? `<span class="promo-badge">${promo.discount}</span>` : ''}
+        </div>
+        ${promo.description ? `<p class="promo-modal-description">${promo.description}</p>` : ''}
+        ${promo.type ? `<div class="promo-modal-meta"><span class="promo-type">${promo.type}</span></div>` : ''}
+        ${deviceListsHtml}
+        ${promo.requirements ? `
+            <div class="promo-modal-section">
+                <h3 class="promo-modal-section-title">📋 Requirements</h3>
+                <div class="promo-modal-section-content">${formatPromoText(promo.requirements)}</div>
+            </div>
+        ` : ''}
+        ${promo.limitations ? `
+            <div class="promo-modal-section">
+                <h3 class="promo-modal-section-title">⚠️ Limitations</h3>
+                <div class="promo-modal-section-content">${formatPromoText(promo.limitations)}</div>
+            </div>
+        ` : ''}
+        ${promo.additionalInfo ? `
+            <div class="promo-modal-section">
+                <h3 class="promo-modal-section-title">ℹ️ Additional Information</h3>
+                <div class="promo-modal-section-content">${formatPromoText(promo.additionalInfo)}</div>
+            </div>
+        ` : ''}
+        ${promo.validUntil ? `<div class="promo-modal-validity">⏰ Valid until: ${promo.validUntil}</div>` : ''}
+        ${promo.link ? `<a href="${promo.link}" target="_blank" class="promo-modal-link">Learn More →</a>` : ''}
+    `;
+    
+    promoModal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+// Close promo modal
+function closePromoModal() {
+    if (promoModal) {
+        promoModal.style.display = 'none';
+        document.body.style.overflow = '';
+    }
+}
+
+// Make showPromoDetails available globally for onclick
+window.showPromoDetails = showPromoDetails;
+
+// Format promo text (handle line breaks, bullets, etc.)
+function formatPromoText(text) {
+    if (!text) return '';
+    
+    // Split by common separators and format as list
+    const lines = text.split(/[;|•\n]/).filter(line => line.trim());
+    
+    if (lines.length > 1) {
+        return '<ul class="promo-list">' + lines.map(line => 
+            `<li>${line.trim()}</li>`
+        ).join('') + '</ul>';
+    }
+    
+    return `<p>${text}</p>`;
+}
+
+// Populate filter dropdowns
+function populateFilters() {
+    if (!filterType) return;
+    
+    // Get unique promo types (Upgrade, New Activation, Port In Required, etc.)
+    const types = [...new Set(promotionsData.map(p => p.type).filter(Boolean))].sort();
+    
+    // Populate type filter
+    filterType.innerHTML = '<option value="">All Types</option>' + 
+        types.map(type => `<option value="${type}">${type}</option>`).join('');
+    
+    console.log(`Loaded ${promotionsData.length} promotional offers with ${types.length} types`);
+}
+
+// Apply filters
+function applyFilters() {
+    if (!filterType || !filterSearch) return;
+    
+    const typeFilter = filterType.value.toLowerCase();
+    const searchFilter = filterSearch.value.toLowerCase().trim();
+    
+    filteredPromotions = promotionsData.filter(promo => {
+        const matchesType = !typeFilter || (promo.type && promo.type.toLowerCase() === typeFilter);
+        const matchesSearch = !searchFilter || 
+            promo.title.toLowerCase().includes(searchFilter) ||
+            (promo.description && promo.description.toLowerCase().includes(searchFilter)) ||
+            (promo.type && promo.type.toLowerCase().includes(searchFilter)) ||
+            (promo.requirements && promo.requirements.toLowerCase().includes(searchFilter)) ||
+            (promo.limitations && promo.limitations.toLowerCase().includes(searchFilter)) ||
+            (promo.discount && promo.discount.toLowerCase().includes(searchFilter));
+        
+        return matchesType && matchesSearch;
+    });
+    
+    displayPromotions();
+}
+
+// Clear all filters
+function clearAllFilters() {
+    if (filterType) filterType.value = '';
+    if (filterSearch) filterSearch.value = '';
+    filteredPromotions = [...promotionsData];
+    displayPromotions();
+}
+
+// Show CORS warning message
+function showCorsWarning() {
+    if (!promoContent) return;
+    
+    const warningHtml = `
+        <div class="cors-warning">
+            <div class="warning-icon">⚠️</div>
+            <h3>Cannot Load Promotions Directly</h3>
+            <p>The promotions file is hosted on Proton Drive, which blocks direct access from web browsers due to CORS restrictions.</p>
+            <div class="warning-solutions">
+                <h4>Solutions:</h4>
+                <ul>
+                    <li><strong>Use Google Sheets:</strong> Convert your promotions to a Google Sheet and configure the sheet ID in the code</li>
+                    <li><strong>Download the file:</strong> Use the download button above to get the file directly</li>
+                    <li><strong>Host elsewhere:</strong> Upload the file to a service that allows CORS (like GitHub, or your own server)</li>
+                </ul>
+                <p class="note-text">For now, sample promotions are displayed below for demonstration.</p>
+            </div>
+        </div>
+    `;
+    
+    // Insert warning before promo grid
+    if (promoGrid && promoGrid.parentElement) {
+        const warningDiv = document.createElement('div');
+        warningDiv.innerHTML = warningHtml;
+        promoGrid.parentElement.insertBefore(warningDiv.firstElementChild, promoGrid);
     }
 }
 

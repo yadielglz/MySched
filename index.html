@@ -6,55 +6,175 @@
     <meta name="description" content="Employee Schedule Viewer - View your work schedule anytime, anywhere">
     <meta name="theme-color" content="#E20074">
     <title>Employee Schedule</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="styles.css">
     <link rel="apple-touch-icon" href="icons/icon-192x192.png">
 </head>
 <body>
     <div class="container">
-        <div class="clock-container">
-            <div class="clock-time" id="clockTime">--:--</div>
-            <div class="clock-day" id="clockDay">--</div>
-        </div>
-        <header>
-            <h1>📅 Employee Schedule</h1>
-            <div class="header-controls">
-                <input type="text" id="searchInput" placeholder="Search employee..." class="search-input">
-                <button id="refreshBtn" class="refresh-btn" title="Refresh Schedule">
-                    <span>🔄</span>
-                </button>
-            </div>
-        </header>
+        <!-- Navigation Bar -->
+        <nav class="main-nav">
+            <button id="homeBtn" class="nav-btn active">Home</button>
+            <button id="scheduleBtn" class="nav-btn">Schedule</button>
+            <button id="promotionsBtn" class="nav-btn">Promotions</button>
+        </nav>
 
-        <div class="loading" id="loading">
-            <div class="spinner"></div>
-            <p>Loading schedule...</p>
-        </div>
-
-        <div class="error" id="error" style="display: none;">
-            <p>⚠️ Unable to load schedule. Please check your connection and try again.</p>
-            <button id="retryBtn" class="retry-btn">Retry</button>
-        </div>
-
-        <div class="schedule-container" id="scheduleContainer" style="display: none;">
-            <div class="week-selector">
-                <button id="prevWeek" class="week-nav-btn">← Previous Week</button>
-                <span id="weekRange" class="week-range"></span>
-                <button id="nextWeek" class="week-nav-btn">Next Week →</button>
+        <!-- Home Page View -->
+        <div class="home-view" id="homeView">
+            <div class="clock-container">
+                <div class="clock-time" id="clockTime">--:--</div>
+                <div class="clock-day" id="clockDay">--</div>
             </div>
 
-            <!-- Mobile Day Selector (only visible on mobile) -->
-            <div class="day-selector-mobile" id="daySelectorMobile" style="display: none;">
-                <button id="prevDay" class="day-nav-btn">←</button>
-                <span id="currentDay" class="current-day">THU</span>
-                <button id="nextDay" class="day-nav-btn">→</button>
+            <div class="home-content">
+                <h1 class="home-title">Welcome to MySched</h1>
+                <p class="home-subtitle">Your employee schedule management system</p>
+
+                <div class="quick-actions">
+                    <button id="viewScheduleBtn" class="action-card">
+                        <div class="action-icon">📅</div>
+                        <div class="action-content">
+                            <h3>View Schedule</h3>
+                            <p>Check your work schedule for past, current, and next week</p>
+                        </div>
+                    </button>
+                </div>
+
+                <div class="info-section">
+                    <h2>Quick Info</h2>
+                    <div class="info-cards">
+                        <div class="info-card">
+                            <div class="info-label">Current Week</div>
+                            <div class="info-value" id="currentWeekInfo">Loading...</div>
+                        </div>
+                        <div class="info-card">
+                            <div class="info-label">Employees</div>
+                            <div class="info-value" id="employeeCount">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Schedule View -->
+        <div class="schedule-view" id="scheduleView" style="display: none;">
+            <header>
+                <h1>📅 Employee Schedule</h1>
+                <div class="header-controls">
+                    <button id="refreshBtn" class="refresh-btn" title="Refresh Schedule">
+                        <span>🔄</span>
+                    </button>
+                </div>
+            </header>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Loading schedule...</p>
             </div>
 
-            <div class="schedule-table-wrapper">
-                <table class="schedule-table" id="scheduleTable">
-                    <thead id="scheduleHeader"></thead>
-                    <tbody id="scheduleBody"></tbody>
-                </table>
+            <div class="error" id="error" style="display: none;">
+                <p>⚠️ Unable to load schedule. Please check your connection and try again.</p>
+                <button id="retryBtn" class="retry-btn">Retry</button>
+            </div>
+
+            <div class="schedule-container" id="scheduleContainer" style="display: none;">
+                <!-- Desktop Week Selector -->
+                <div class="week-selector">
+                    <button id="prevWeek" class="week-nav-btn">← Previous Week</button>
+                    <span id="weekRange" class="week-range"></span>
+                    <button id="nextWeek" class="week-nav-btn">Next Week →</button>
+                </div>
+
+                <!-- Mobile Navigation (two lines) -->
+                <div class="mobile-nav-container" id="mobileNavContainer" style="display: none;">
+                    <!-- Line 1: Week Navigation -->
+                    <div class="mobile-week-nav">
+                        <button id="prevWeekMobile" class="mobile-nav-btn-icon">←</button>
+                        <span id="weekRangeMobile" class="mobile-week-label">Current Week</span>
+                        <button id="nextWeekMobile" class="mobile-nav-btn-icon">→</button>
+                    </div>
+                    <!-- Line 2: Day Navigation -->
+                    <div class="mobile-day-nav">
+                        <button id="prevDay" class="mobile-nav-btn-icon">←</button>
+                        <span id="currentDay" class="mobile-day-label">Today</span>
+                        <button id="nextDay" class="mobile-nav-btn-icon">→</button>
+                    </div>
+                </div>
+
+                <div class="schedule-table-wrapper">
+                    <table class="schedule-table" id="scheduleTable">
+                        <thead id="scheduleHeader"></thead>
+                        <tbody id="scheduleBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Promotions View -->
+        <div class="promotions-view" id="promotionsView" style="display: none;">
+            <header>
+                <h1>🎁 Current Promotions</h1>
+                <div class="header-controls">
+                    <button id="refreshPromosBtn" class="refresh-btn" title="Refresh Promotions">
+                        <span>🔄</span>
+                    </button>
+                </div>
+            </header>
+
+            <div class="promotions-content">
+                <div class="promo-actions">
+                    <a href="https://drive.proton.me/urls/5ZCKS3Y534#8tcCBS6uIwRB" 
+                       target="_blank" 
+                       class="download-btn"
+                       id="downloadPromoBtn">
+                        <span class="download-icon">⬇️</span>
+                        <span>Download Promotions File (PDF)</span>
+                    </a>
+                </div>
+
+                <div class="promo-filters" id="promoFilters" style="display: none;">
+                    <div class="filter-group">
+                        <label for="filterType">Filter by Type:</label>
+                        <select id="filterType" class="filter-select">
+                            <option value="">All Types</option>
+                        </select>
+                    </div>
+                    <div class="filter-group filter-search-only">
+                        <label for="filterSearch">Search Promotions:</label>
+                        <input type="text" id="filterSearch" class="filter-input" placeholder="Search promotions...">
+                    </div>
+                    <button id="clearFilters" class="clear-filters-btn">Clear Filters</button>
+                </div>
+
+                <div class="promo-display-area" id="promoDisplayArea">
+                    <div class="promo-loading" id="promoLoading">
+                        <div class="spinner"></div>
+                        <p>Loading promotions...</p>
+                    </div>
+                    <div class="promo-error" id="promoError" style="display: none;">
+                        <p>⚠️ Unable to load promotions. You can download the file directly using the button above.</p>
+                        <button id="retryPromoBtn" class="retry-btn">Retry</button>
+                    </div>
+                    <div class="promo-content" id="promoContent" style="display: none;">
+                        <div class="promo-grid" id="promoGrid">
+                            <!-- Promotions will be displayed here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Promo Detail Modal -->
+        <div class="promo-modal" id="promoModal" style="display: none;">
+            <div class="promo-modal-overlay" id="promoModalOverlay"></div>
+            <div class="promo-modal-content">
+                <button class="promo-modal-close" id="promoModalClose">×</button>
+                <div id="promoModalBody">
+                    <!-- Detailed promo information will be displayed here -->
+                </div>
             </div>
         </div>
     </div>
