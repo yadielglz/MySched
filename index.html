@@ -30,29 +30,35 @@
             </div>
 
             <div class="home-content">
-                <h1 class="home-title">Welcome to MySched</h1>
-                <p class="home-subtitle">Your employee schedule management system</p>
+                <div class="window-panel">
+                    <div class="window-header">Welcome to MySched</div>
+                    <div class="window-content">
+                        <p class="home-subtitle" style="text-align: center; margin-bottom: 20px; color: var(--text-medium);">Your employee schedule management system</p>
 
-                <div class="quick-actions">
-                    <button id="viewScheduleBtn" class="action-card">
-                        <div class="action-icon">📅</div>
-                        <div class="action-content">
-                            <h3>View Schedule</h3>
-                            <p>Check your work schedule for past, current, and next week</p>
+                        <div class="quick-actions">
+                            <button id="viewScheduleBtn" class="action-card">
+                                <div class="action-icon">📅</div>
+                                <div class="action-content">
+                                    <h3>View Schedule</h3>
+                                    <p>Check your work schedule for past, current, and next week</p>
+                                </div>
+                            </button>
                         </div>
-                    </button>
+                    </div>
                 </div>
 
-                <div class="info-section">
-                    <h2>Quick Info</h2>
-                    <div class="info-cards">
-                        <div class="info-card">
-                            <div class="info-label">Current Week</div>
-                            <div class="info-value" id="currentWeekInfo">Loading...</div>
-                        </div>
-                        <div class="info-card">
-                            <div class="info-label">Employees</div>
-                            <div class="info-value" id="employeeCount">-</div>
+                <div class="window-panel">
+                    <div class="window-header">Quick Info</div>
+                    <div class="window-content">
+                        <div class="info-cards">
+                            <div class="info-card">
+                                <div class="info-label">Current Week</div>
+                                <div class="info-value" id="currentWeekInfo">Loading...</div>
+                            </div>
+                            <div class="info-card">
+                                <div class="info-label">Employees</div>
+                                <div class="info-value" id="employeeCount">-</div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -61,23 +67,36 @@
 
         <!-- Schedule View -->
         <div class="schedule-view" id="scheduleView" style="display: none;">
-            <header>
-                <h1>📅 Employee Schedule</h1>
-                <div class="header-controls">
-                    <button id="refreshBtn" class="refresh-btn" title="Refresh Schedule">
-                        <span>🔄</span>
-                    </button>
+            <div class="window-panel">
+                <div class="window-header">📅 Employee Schedule</div>
+                <div class="window-content" style="padding: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                        <div></div>
+                        <button id="refreshBtn" class="refresh-btn" title="Refresh Schedule">
+                            <span>🔄</span> Refresh
+                        </button>
+                    </div>
                 </div>
-            </header>
-
-            <div class="loading" id="loading">
-                <div class="spinner"></div>
-                <p>Loading schedule...</p>
             </div>
 
-            <div class="error" id="error" style="display: none;">
-                <p>⚠️ Unable to load schedule. Please check your connection and try again.</p>
-                <button id="retryBtn" class="retry-btn">Retry</button>
+            <div class="window-panel" id="loading" style="display: none;">
+                <div class="window-header">Loading...</div>
+                <div class="window-content">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Loading schedule...</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="window-panel" id="error" style="display: none;">
+                <div class="window-header">⚠️ Error</div>
+                <div class="window-content">
+                    <div class="error">
+                        <p>Unable to load schedule. Please check your connection and try again.</p>
+                        <button id="retryBtn" class="retry-btn">Retry</button>
+                    </div>
+                </div>
             </div>
 
             <div class="schedule-container" id="scheduleContainer" style="display: none;">
@@ -115,52 +134,68 @@
 
         <!-- Promotions View -->
         <div class="promotions-view" id="promotionsView" style="display: none;">
-            <header>
-                <h1>🎁 Current Promotions</h1>
-                <div class="header-controls">
-                    <button id="refreshPromosBtn" class="refresh-btn" title="Refresh Promotions">
-                        <span>🔄</span>
-                    </button>
+            <div class="window-panel">
+                <div class="window-header">🎁 Current Promotions</div>
+                <div class="window-content" style="padding: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                        <div></div>
+                        <button id="refreshPromosBtn" class="refresh-btn" title="Refresh Promotions">
+                            <span>🔄</span> Refresh
+                        </button>
+                    </div>
                 </div>
-            </header>
+            </div>
 
             <div class="promotions-content">
-                <div class="promo-actions">
-                    <a href="https://drive.proton.me/urls/5ZCKS3Y534#8tcCBS6uIwRB" 
-                       target="_blank" 
-                       class="download-btn"
-                       id="downloadPromoBtn">
-                        <span class="download-icon">⬇️</span>
-                        <span>Download Promotions File (PDF)</span>
-                    </a>
+                <div class="window-panel">
+                    <div class="window-header">Download</div>
+                    <div class="window-content" style="text-align: center;">
+                        <a href="https://drive.proton.me/urls/5ZCKS3Y534#8tcCBS6uIwRB" 
+                           target="_blank" 
+                           class="download-btn"
+                           id="downloadPromoBtn">
+                            <span class="download-icon">⬇️</span>
+                            <span>Download Promotions File (PDF)</span>
+                        </a>
+                    </div>
                 </div>
 
-                <div class="promo-filters" id="promoFilters" style="display: none;">
-                    <div class="filter-group">
-                        <label for="filterType">Filter by Type:</label>
-                        <select id="filterType" class="filter-select">
-                            <option value="">All Types</option>
-                        </select>
+                <div class="window-panel" id="promoFilters" style="display: none;">
+                    <div class="window-header">Filters</div>
+                    <div class="window-content">
+                        <div class="promo-filters">
+                            <div class="filter-group">
+                                <label for="filterType">Filter by Type:</label>
+                                <select id="filterType" class="filter-select">
+                                    <option value="">All Types</option>
+                                </select>
+                            </div>
+                            <div class="filter-group filter-search-only">
+                                <label for="filterSearch">Search Promotions:</label>
+                                <input type="text" id="filterSearch" class="filter-input" placeholder="Search promotions...">
+                            </div>
+                            <button id="clearFilters" class="clear-filters-btn">Clear Filters</button>
+                        </div>
                     </div>
-                    <div class="filter-group filter-search-only">
-                        <label for="filterSearch">Search Promotions:</label>
-                        <input type="text" id="filterSearch" class="filter-input" placeholder="Search promotions...">
-                    </div>
-                    <button id="clearFilters" class="clear-filters-btn">Clear Filters</button>
                 </div>
 
-                <div class="promo-display-area" id="promoDisplayArea">
-                    <div class="promo-loading" id="promoLoading">
-                        <div class="spinner"></div>
-                        <p>Loading promotions...</p>
-                    </div>
-                    <div class="promo-error" id="promoError" style="display: none;">
-                        <p>⚠️ Unable to load promotions. You can download the file directly using the button above.</p>
-                        <button id="retryPromoBtn" class="retry-btn">Retry</button>
-                    </div>
-                    <div class="promo-content" id="promoContent" style="display: none;">
-                        <div class="promo-grid" id="promoGrid">
-                            <!-- Promotions will be displayed here -->
+                <div class="window-panel" id="promoDisplayArea">
+                    <div class="window-header">Promotions</div>
+                    <div class="window-content">
+                        <div class="promo-loading" id="promoLoading">
+                            <div class="spinner"></div>
+                            <p>Loading promotions...</p>
+                        </div>
+                        <div class="promo-error" id="promoError" style="display: none;">
+                            <p>⚠️ Unable to load promotions. You can download the file directly using the button above.</p>
+                            <button id="retryPromoBtn" class="retry-btn">Retry</button>
+                        </div>
+                        <div class="promo-content" id="promoContent" style="display: none;">
+                            <div class="promo-display-area">
+                                <div class="promo-grid" id="promoGrid">
+                                    <!-- Promotions will be displayed here -->
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

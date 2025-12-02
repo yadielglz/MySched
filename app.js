@@ -1099,7 +1099,7 @@ async function loadPromotions() {
         
         promoLoading.style.display = 'none';
         promoContent.style.display = 'block';
-        if (promoFilters) promoFilters.style.display = 'flex';
+        if (promoFilters) promoFilters.style.display = 'block';
         
     } catch (error) {
         console.error('Error loading promotions from Google Sheet:', error);
