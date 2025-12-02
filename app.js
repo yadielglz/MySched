@@ -1158,15 +1158,26 @@ function parseCSVPromotions(csvText) {
     const headers = parseCSVLine(lines[0]);
     const headerMap = {};
     headers.forEach((h, i) => {
-        headerMap[h.toLowerCase().trim()] = i;
+        // Normalize header: lowercase, trim, and replace multiple spaces with single space
+        const normalized = h.toLowerCase().trim().replace(/\s+/g, ' ');
+        headerMap[normalized] = i;
+        // Also store original case for exact matches
+        headerMap[h.trim()] = i;
     });
+    
+    // Check if this looks like the new format with Category, Segment, Promo Name, etc.
+    // Try multiple variations of the header names
+    const hasNewFormat = (headerMap['category'] !== undefined || headerMap['Category'] !== undefined) && 
+                         (headerMap['promo name'] !== undefined || headerMap['Promo Name'] !== undefined || headerMap['promoname'] !== undefined) &&
+                         (headerMap['eligible rate plans'] !== undefined || headerMap['Eligible Rate Plans'] !== undefined || headerMap['eligiblerateplans'] !== undefined);
     
     // Check if this looks like a promotions sheet (has promo-specific columns)
     const hasPromoColumns = headerMap['title'] !== undefined || 
                            headerMap['promo_name'] !== undefined || 
                            headerMap['promotion'] !== undefined ||
                            headerMap['requirements'] !== undefined ||
-                           headerMap['limitations'] !== undefined;
+                           headerMap['limitations'] !== undefined ||
+                           hasNewFormat;
     
     // Check if this looks like a plan/pricing sheet (has plan columns)
     const hasPlanColumns = headerMap['plan_id'] !== undefined || 
@@ -1186,12 +1197,114 @@ function parseCSVPromotions(csvText) {
         const cells = parseCSVLine(lines[i]);
         if (cells.length === 0 || !cells[0] || !cells[0].trim()) continue;
         
-        const getValue = (key) => {
-            const idx = headerMap[key];
-            return idx !== undefined ? (cells[idx] || '').trim() : '';
+        const getValue = (keys) => {
+            // Support multiple key variations
+            const keyArray = Array.isArray(keys) ? keys : [keys];
+            for (const key of keyArray) {
+                const normalized = key.toLowerCase().trim().replace(/\s+/g, ' ');
+                let idx = headerMap[normalized];
+                if (idx === undefined) {
+                    idx = headerMap[key]; // Try original case
+                }
+                if (idx !== undefined) {
+                    return (cells[idx] || '').trim();
+                }
+            }
+            return '';
         };
         
-        // ONLY look for promotional offer columns
+        // Check if this is the new format
+        if (hasNewFormat) {
+            // New format columns: Category, Segment, Promo Name, Offer ID, MP Code, Status/Start-End, Devices, Promo Value / Tiers, Requirements (Lines / Port / Trade), Eligible Rate Plans, Max Redemptions per BAN, Max Payout, Not Stackable / Notes
+            const category = getValue(['category', 'Category']);
+            const segment = getValue(['segment', 'Segment']);
+            const promoTitle = getValue(['promo name', 'Promo Name', 'promoname', 'PromoName']);
+            const offerId = getValue(['offer id', 'Offer ID', 'offerid', 'OfferID']);
+            const mpCode = getValue(['mp code', 'MP Code', 'mpcode', 'MPCode']);
+            const statusStartEnd = getValue(['status/start-end', 'Status/Start-End', 'status', 'Status']);
+            const devices = getValue(['devices', 'Devices']);
+            const promoValueTiers = getValue(['promo value / tiers', 'Promo Value / Tiers', 'promo value', 'Promo Value']);
+            const requirementsRaw = getValue(['requirements (lines / port / trade)', 'Requirements (Lines / Port / Trade)', 'requirements', 'Requirements']);
+            const eligibleRatePlans = getValue(['eligible rate plans', 'Eligible Rate Plans', 'eligiblerateplans']);
+            const maxRedemptions = getValue(['max redemptions per ban', 'Max Redemptions per BAN', 'max redemptions', 'Max Redemptions']);
+            const maxPayout = getValue(['max payout', 'Max Payout', 'maxpayout']);
+            const notes = getValue(['not stackable / notes', 'Not Stackable / Notes', 'notes', 'Notes']);
+            
+            // Skip if no promo name
+            if (!promoTitle || promoTitle.trim() === '') continue;
+            
+            // Parse requirements: Lines / Port / Trade
+            // Format could be like "New Line, Port-In, Trade-In" or "Y, P, Trade" etc.
+            let newLine = '';
+            let portIn = '';
+            let tradeIn = '';
+            
+            if (requirementsRaw) {
+                const reqUpper = requirementsRaw.toUpperCase();
+                // Check for explicit mentions
+                if (reqUpper.includes('NEW LINE') || reqUpper.includes('LINES') || reqUpper.includes('LINE')) {
+                    newLine = 'Y';
+                }
+                if (reqUpper.includes('PORT') || reqUpper.includes('PORT-IN') || reqUpper.includes('PORT IN')) {
+                    portIn = 'P';
+                }
+                if (reqUpper.includes('TRADE') || reqUpper.includes('TRADE-IN') || reqUpper.includes('TRADE IN')) {
+                    tradeIn = 'Y';
+                }
+                // Check for Y/P/N format
+                if (reqUpper.includes('Y') && !reqUpper.includes('TRADE')) {
+                    newLine = 'Y';
+                }
+                if (reqUpper.includes('P')) {
+                    portIn = 'P';
+                }
+            }
+            
+            // Parse devices - could contain trade-in device info
+            const tradeInDevices = devices || '';
+            
+            // Parse promo value/tiers - could contain device tier information
+            const devices900 = promoValueTiers.includes('900') ? promoValueTiers : '';
+            const devices630 = promoValueTiers.includes('630') ? promoValueTiers : '';
+            const devices315 = promoValueTiers.includes('315') ? promoValueTiers : '';
+            
+            promotions.push({
+                id: i - 1,
+                title: promoTitle,
+                description: segment || '',
+                requirements: requirementsRaw || '',
+                limitations: notes || '',
+                type: category || 'Current Offer',
+                discount: promoValueTiers || '',
+                validUntil: statusStartEnd || '',
+                image: '',
+                link: '',
+                plansSupported: eligibleRatePlans,
+                newLine: newLine,
+                portIn: portIn,
+                upgrade: '', // Not in new format
+                tradeIn: tradeIn,
+                tradeInDevices: tradeInDevices,
+                devices900: devices900,
+                devices630: devices630,
+                devices315: devices315,
+                additionalInfo: notes || '',
+                // New fields
+                category: category,
+                segment: segment,
+                offerId: offerId,
+                mpCode: mpCode,
+                statusStartEnd: statusStartEnd,
+                devices: devices,
+                promoValueTiers: promoValueTiers,
+                maxRedemptions: maxRedemptions,
+                maxPayout: maxPayout
+            });
+            
+            continue;
+        }
+        
+        // Legacy format parsing (keep for backward compatibility)
         const promoTitle = getValue('title') || getValue('promo_name') || getValue('promotion') || getValue('name') || '';
         const description = getValue('description') || getValue('desc') || getValue('details') || '';
         const requirements = getValue('requirements') || getValue('requirement') || getValue('qualifications') || '';
@@ -1201,6 +1314,18 @@ function parseCSVPromotions(csvText) {
         const discount = getValue('discount') || getValue('savings') || getValue('offer') || '';
         const image = getValue('image') || getValue('image_url') || getValue('imageurl') || '';
         const link = getValue('link') || getValue('url') || '';
+        
+        // Parse plans supported
+        const plansSupported = getValue('plans') || getValue('plan') || getValue('plan_type') || getValue('plan_name') || getValue('supported_plans') || '';
+        
+        // Parse device requirements: New Line (Y), Port-In (P), Upgrade (N), Trade-in
+        const newLine = getValue('new_line') || getValue('newline') || getValue('y') || '';
+        const portIn = getValue('port_in') || getValue('portin') || getValue('p') || '';
+        const upgrade = getValue('upgrade') || getValue('n') || '';
+        const tradeIn = getValue('trade_in') || getValue('tradein') || getValue('trade') || '';
+        
+        // Parse trade-in devices with accredited values
+        const tradeInDevices = getValue('trade_in_devices') || getValue('tradein_devices') || getValue('trade_devices') || getValue('eligible_trade_ins') || '';
         
         // Parse device lists for different price tiers
         const devices900 = getValue('devices_900') || getValue('$900_devices') || getValue('devices_900_list') || '';
@@ -1230,6 +1355,12 @@ function parseCSVPromotions(csvText) {
             validUntil: validUntil,
             image: image,
             link: link,
+            plansSupported: plansSupported,
+            newLine: newLine,
+            portIn: portIn,
+            upgrade: upgrade,
+            tradeIn: tradeIn,
+            tradeInDevices: tradeInDevices,
             devices900: devices900,
             devices630: devices630,
             devices315: devices315,
@@ -1280,6 +1411,90 @@ function displayImagePromotion(imageUrl) {
     `;
 }
 
+// Parse trade-in devices with accredited values
+function parseTradeInDevices(tradeInText) {
+    if (!tradeInText || !tradeInText.trim()) return [];
+    
+    const devices = [];
+    // Try to parse format like "iPhone 12: $300, iPhone 11: $200" or "iPhone 12 ($300), iPhone 11 ($200)"
+    const patterns = [
+        /([^:,$(]+)\s*[:\-]\s*\$?(\d+)/g,  // "Device: $300" or "Device - 300"
+        /([^(]+)\s*\(\s*\$?(\d+)\s*\)/g    // "Device ($300)"
+    ];
+    
+    for (const pattern of patterns) {
+        let match;
+        while ((match = pattern.exec(tradeInText)) !== null) {
+            const deviceName = match[1].trim();
+            const value = parseInt(match[2].trim());
+            if (deviceName && !isNaN(value)) {
+                devices.push({ name: deviceName, value: value });
+            }
+        }
+        if (devices.length > 0) break;
+    }
+    
+    // If no structured format found, try splitting by common separators
+    if (devices.length === 0) {
+        const parts = tradeInText.split(/[,;|•\n]/).filter(p => p.trim());
+        parts.forEach(part => {
+            const trimmed = part.trim();
+            if (trimmed) {
+                devices.push({ name: trimmed, value: null });
+            }
+        });
+    }
+    
+    return devices;
+}
+
+// Organize promotions by plans supported
+function organizePromotionsByPlans(promotions) {
+    const organized = {};
+    
+    promotions.forEach(promo => {
+        // Parse plans - could be comma-separated, semicolon-separated, etc.
+        const plans = promo.plansSupported 
+            ? promo.plansSupported.split(/[,;|•\n]/).map(p => p.trim()).filter(p => p)
+            : ['All Plans'];
+        
+        plans.forEach(plan => {
+            if (!organized[plan]) {
+                organized[plan] = [];
+            }
+            organized[plan].push(promo);
+        });
+        
+        // If no plans specified, add to "All Plans"
+        if (!promo.plansSupported || !promo.plansSupported.trim()) {
+            if (!organized['All Plans']) {
+                organized['All Plans'] = [];
+            }
+            organized['All Plans'].push(promo);
+        }
+    });
+    
+    return organized;
+}
+
+// Get device requirement badges
+function getDeviceRequirementBadges(promo) {
+    const badges = [];
+    if (promo.newLine && (promo.newLine.toLowerCase() === 'y' || promo.newLine.toLowerCase() === 'yes' || promo.newLine === 'Y')) {
+        badges.push({ text: 'New Line', class: 'req-new-line', icon: '➕' });
+    }
+    if (promo.portIn && (promo.portIn.toLowerCase() === 'p' || promo.portIn.toLowerCase() === 'port' || promo.portIn === 'P')) {
+        badges.push({ text: 'Port-In', class: 'req-port-in', icon: '📞' });
+    }
+    if (promo.upgrade && (promo.upgrade.toLowerCase() === 'n' || promo.upgrade.toLowerCase() === 'upgrade' || promo.upgrade === 'N')) {
+        badges.push({ text: 'Upgrade', class: 'req-upgrade', icon: '⬆️' });
+    }
+    if (promo.tradeIn && (promo.tradeIn.toLowerCase() === 'y' || promo.tradeIn.toLowerCase() === 'yes' || promo.tradeIn.toLowerCase() === 'trade' || promo.tradeIn === 'Y')) {
+        badges.push({ text: 'Trade-In', class: 'req-trade-in', icon: '🔄' });
+    }
+    return badges;
+}
+
 // Display promotions in grid
 function displayPromotions() {
     if (!promoGrid) return;
@@ -1289,44 +1504,140 @@ function displayPromotions() {
         return;
     }
     
-    promoGrid.innerHTML = filteredPromotions.map(promo => `
-        <div class="promo-card" data-type="${promo.type || ''}" data-promo-id="${promo.id}" onclick="showPromoDetails(${promo.id})">
-            ${promo.image ? `<div class="promo-image-wrapper"><img src="${promo.image}" alt="${promo.title}" class="promo-card-image"></div>` : ''}
-            <div class="promo-card-content">
-                <div class="promo-card-header">
-                    <h3 class="promo-card-title">${promo.title}</h3>
-                    ${promo.discount ? `<span class="promo-badge">${promo.discount}</span>` : ''}
+    // Organize by plans
+    const organizedByPlans = organizePromotionsByPlans(filteredPromotions);
+    const planNames = Object.keys(organizedByPlans).sort();
+    
+    let html = '';
+    
+    planNames.forEach(planName => {
+        const planPromos = organizedByPlans[planName];
+        
+        html += `
+            <div class="plan-group">
+                <div class="plan-group-header">
+                    <h3 class="plan-name">${planName}</h3>
+                    <span class="plan-count">${planPromos.length} ${planPromos.length === 1 ? 'Promotion' : 'Promotions'}</span>
                 </div>
-                ${promo.description ? `<p class="promo-card-description">${promo.description}</p>` : ''}
-                ${promo.type ? `<div class="promo-card-meta">
-                    <span class="promo-type">${promo.type}</span>
-                </div>` : ''}
-                ${promo.requirements ? `
-                    <div class="promo-section">
-                        <h4 class="promo-section-title">📋 Requirements</h4>
-                        <div class="promo-section-content">${formatPromoText(promo.requirements)}</div>
-                    </div>
-                ` : ''}
-                ${promo.limitations ? `
-                    <div class="promo-section">
-                        <h4 class="promo-section-title">⚠️ Limitations</h4>
-                        <div class="promo-section-content">${formatPromoText(promo.limitations)}</div>
-                    </div>
-                ` : ''}
-                ${promo.validUntil ? `<div class="promo-validity">⏰ Valid until: ${promo.validUntil}</div>` : ''}
-                <div class="promo-card-footer">
-                    <button class="promo-view-details-btn">View Details →</button>
-                    ${promo.link ? `<a href="${promo.link}" target="_blank" class="promo-link" onclick="event.stopPropagation()">Learn More →</a>` : ''}
+                <div class="plan-promotions">
+                    ${planPromos.map(promo => {
+                        const reqBadges = getDeviceRequirementBadges(promo);
+                        const tradeInDevices = parseTradeInDevices(promo.tradeInDevices || '');
+                        
+                        return `
+                        <div class="promo-card" data-type="${promo.type || ''}" data-promo-id="${promo.id}" onclick="showPromoDetails(${promo.id})">
+                            ${promo.image ? `<div class="promo-image-wrapper"><img src="${promo.image}" alt="${promo.title}" class="promo-card-image"></div>` : ''}
+                            <div class="promo-card-content">
+                                <div class="promo-card-header">
+                                    <h3 class="promo-card-title">${promo.title}</h3>
+                                </div>
+                                
+                                ${promo.promoValueTiers ? `
+                                    <div class="promo-value-banner">
+                                        <span class="value-badge">${promo.promoValueTiers}</span>
+                                    </div>
+                                ` : promo.discount ? `
+                                    <div class="promo-value-banner">
+                                        <span class="value-badge">${promo.discount}</span>
+                                    </div>
+                                ` : ''}
+                                
+                                ${promo.plansSupported ? `
+                                    <div class="promo-section">
+                                        <h4 class="promo-section-title">📱 Plans Supported</h4>
+                                        <div class="promo-section-content">${formatPromoText(promo.plansSupported)}</div>
+                                    </div>
+                                ` : ''}
+                                
+                                ${reqBadges.length > 0 ? `
+                                    <div class="device-requirements">
+                                        <h4 class="req-section-title">Device Requirements:</h4>
+                                        <div class="req-badges">
+                                            ${reqBadges.map(badge => `
+                                                <span class="req-badge ${badge.class}">
+                                                    ${badge.icon} ${badge.text}
+                                                </span>
+                                            `).join('')}
+                                        </div>
+                                    </div>
+                                ` : ''}
+                                
+                                ${tradeInDevices.length > 0 ? `
+                                    <div class="trade-in-section">
+                                        <h4 class="trade-in-title">🔄 Trade-In Devices:</h4>
+                                        <ul class="trade-in-list">
+                                            ${tradeInDevices.map(device => `
+                                                <li class="trade-in-item">
+                                                    <span class="device-name">${device.name}</span>
+                                                    ${device.value !== null ? `<span class="device-value">$${device.value}</span>` : ''}
+                                                </li>
+                                            `).join('')}
+                                        </ul>
+                                    </div>
+                                ` : ''}
+                                
+                                ${(promo.devices900 || promo.devices630 || promo.devices315) ? `
+                                    <div class="promo-section">
+                                        <h4 class="promo-section-title">💰 Discount Tiers</h4>
+                                        <div class="discount-tiers">
+                                            ${promo.devices900 ? `
+                                                <div class="tier-item">
+                                                    <strong class="tier-label">$900 Off Devices</strong>
+                                                    <div class="tier-value">Any-condition tiers: $900/$630/$315</div>
+                                                </div>
+                                            ` : ''}
+                                            ${promo.devices630 ? `
+                                                <div class="tier-item">
+                                                    <strong class="tier-label">$630 Off Devices</strong>
+                                                    <div class="tier-value">Any-condition tiers: $900/$630/$315</div>
+                                                </div>
+                                            ` : ''}
+                                            ${promo.devices315 ? `
+                                                <div class="tier-item">
+                                                    <strong class="tier-label">$315 Off Devices</strong>
+                                                    <div class="tier-value">Any-condition tiers: $900/$630/$315</div>
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                ` : ''}
+                                
+                                ${promo.requirements ? `
+                                    <div class="promo-section">
+                                        <h4 class="promo-section-title">📋 Requirements</h4>
+                                        <div class="promo-section-content">${formatPromoText(promo.requirements)}</div>
+                                    </div>
+                                ` : ''}
+                                ${promo.limitations || promo.notes ? `
+                                    <div class="promo-section">
+                                        <h4 class="promo-section-title">⚠️ Limitations</h4>
+                                        <div class="promo-section-content">${formatPromoText(promo.notes || promo.limitations)}</div>
+                                    </div>
+                                ` : ''}
+                                ${promo.statusStartEnd || promo.validUntil ? `<div class="promo-validity">⏰ ${promo.statusStartEnd ? (promo.statusStartEnd.includes('Start') ? 'Started ' : '') + promo.statusStartEnd.replace(/Start|End/gi, '').trim() : promo.validUntil}</div>` : ''}
+                                <div class="promo-card-footer">
+                                    <button class="promo-view-details-btn">View Details →</button>
+                                    ${promo.link ? `<a href="${promo.link}" target="_blank" class="promo-link" onclick="event.stopPropagation()">Learn More →</a>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    }).join('')}
                 </div>
             </div>
-        </div>
-    `).join('');
+        `;
+    });
+    
+    promoGrid.innerHTML = html;
 }
 
 // Show promo details in modal
 function showPromoDetails(promoId) {
     const promo = promotionsData.find(p => p.id === promoId);
     if (!promo || !promoModal || !promoModalBody) return;
+    
+    const reqBadges = getDeviceRequirementBadges(promo);
+    const tradeInDevices = parseTradeInDevices(promo.tradeInDevices || '');
     
     let deviceListsHtml = '';
     if (promo.devices900 || promo.devices630 || promo.devices315) {
@@ -1361,11 +1672,81 @@ function showPromoDetails(promoId) {
     promoModalBody.innerHTML = `
         <div class="promo-modal-header">
             <h2 class="promo-modal-title">${promo.title}</h2>
-            ${promo.discount ? `<span class="promo-badge">${promo.discount}</span>` : ''}
         </div>
-        ${promo.description ? `<p class="promo-modal-description">${promo.description}</p>` : ''}
-        ${promo.type ? `<div class="promo-modal-meta"><span class="promo-type">${promo.type}</span></div>` : ''}
-        ${deviceListsHtml}
+        ${promo.promoValueTiers ? `
+            <div class="promo-value-banner-modal">
+                <span class="value-badge-modal">${promo.promoValueTiers}</span>
+            </div>
+        ` : promo.discount ? `
+            <div class="promo-value-banner-modal">
+                <span class="value-badge-modal">${promo.discount}</span>
+            </div>
+        ` : ''}
+        ${promo.plansSupported ? `
+            <div class="promo-modal-section">
+                <h3 class="promo-modal-section-title">📱 Plans Supported</h3>
+                <div class="promo-modal-section-content">${formatPromoText(promo.plansSupported)}</div>
+            </div>
+        ` : ''}
+        ${reqBadges.length > 0 ? `
+            <div class="promo-modal-section">
+                <h3 class="promo-modal-section-title">📋 Device Requirements</h3>
+                <div class="req-badges">
+                    ${reqBadges.map(badge => `
+                        <span class="req-badge ${badge.class}">
+                            ${badge.icon} ${badge.text}
+                        </span>
+                    `).join('')}
+                </div>
+            </div>
+        ` : ''}
+        ${tradeInDevices.length > 0 ? `
+            <div class="promo-modal-section">
+                <h3 class="promo-modal-section-title">🔄 Trade-In Devices</h3>
+                <div class="trade-in-devices-list">
+                    ${tradeInDevices.map(device => `
+                        <div class="trade-in-device-item">
+                            <span class="device-name">${device.name}</span>
+                            ${device.value !== null ? `<span class="device-value">$${device.value}</span>` : ''}
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        ` : promo.devices ? `
+            <div class="promo-modal-section">
+                <h3 class="promo-modal-section-title">🔄 Trade-In Devices</h3>
+                <div class="trade-in-devices-list">
+                    <div class="trade-in-device-item">
+                        <span class="device-name">${promo.devices}</span>
+                    </div>
+                </div>
+            </div>
+        ` : ''}
+        ${(promo.devices900 || promo.devices630 || promo.devices315) ? `
+            <div class="promo-modal-section">
+                <h3 class="promo-modal-section-title">💰 Discount Tiers</h3>
+                <div class="discount-tiers-modal">
+                    ${promo.devices900 ? `
+                        <div class="tier-item-modal">
+                            <strong class="tier-label-modal">$900 Off Devices</strong>
+                            <div class="tier-value-modal">Any-condition tiers: $900/$630/$315</div>
+                        </div>
+                    ` : ''}
+                    ${promo.devices630 ? `
+                        <div class="tier-item-modal">
+                            <strong class="tier-label-modal">$630 Off Devices</strong>
+                            <div class="tier-value-modal">Any-condition tiers: $900/$630/$315</div>
+                        </div>
+                    ` : ''}
+                    ${promo.devices315 ? `
+                        <div class="tier-item-modal">
+                            <strong class="tier-label-modal">$315 Off Devices</strong>
+                            <div class="tier-value-modal">Any-condition tiers: $900/$630/$315</div>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        ` : ''}
         ${promo.requirements ? `
             <div class="promo-modal-section">
                 <h3 class="promo-modal-section-title">📋 Requirements</h3>
@@ -1378,13 +1759,13 @@ function showPromoDetails(promoId) {
                 <div class="promo-modal-section-content">${formatPromoText(promo.limitations)}</div>
             </div>
         ` : ''}
-        ${promo.additionalInfo ? `
+        ${promo.additionalInfo || promo.notes ? `
             <div class="promo-modal-section">
-                <h3 class="promo-modal-section-title">ℹ️ Additional Information</h3>
-                <div class="promo-modal-section-content">${formatPromoText(promo.additionalInfo)}</div>
+                <h3 class="promo-modal-section-title">ℹ️ Notes / Not Stackable</h3>
+                <div class="promo-modal-section-content">${formatPromoText(promo.notes || promo.additionalInfo)}</div>
             </div>
         ` : ''}
-        ${promo.validUntil ? `<div class="promo-modal-validity">⏰ Valid until: ${promo.validUntil}</div>` : ''}
+        ${promo.statusStartEnd || promo.validUntil ? `<div class="promo-modal-validity">⏰ ${promo.statusStartEnd ? (promo.statusStartEnd.includes('Start') ? 'Started ' : '') + promo.statusStartEnd.replace(/Start|End/gi, '').trim() : promo.validUntil}</div>` : ''}
         ${promo.link ? `<a href="${promo.link}" target="_blank" class="promo-modal-link">Learn More →</a>` : ''}
     `;
     
